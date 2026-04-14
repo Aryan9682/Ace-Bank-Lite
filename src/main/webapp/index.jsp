@@ -1,47 +1,80 @@
-<%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ace Bank</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AceBank - Digital Banking</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
 
 </head>
 
-<body>
-<div>
-    <header>
-        <div>
-            <h1>Ace<span>Bank</span></h1>
-        </div>
+<body class="bg-gradient-to-br from-blue-900 via-black to-blue-950 min-h-screen text-white">
 
-        <nav>
-            <ul>
-                <li><a href="${pageContext.request.contextPath}/login.jsp">Login</a></li>
-                <li><a href="${pageContext.request.contextPath}/sign-up.jsp" class="btn-primary">Sign Up</a></li>
-            </ul>
-        </nav>
-    </header>
+<!-- NAVBAR -->
+<nav class="flex justify-between items-center px-10 py-6">
+    <h1 class="text-3xl font-bold text-cyan-400">AceBank</h1>
 
-    <main>
-        <section>
-            <span>Trusted by 2M+ Users</span>
-            <h1>Banking Made <span class="highlight">Easy</span></h1>
-            <p>Join over 40,000 people who open an Ace Bank account every week. Manage, spend, and save your money with
-                ease.</p>
+    <div class="space-x-6">
+        <a href="login.jsp" class="hover:text-cyan-400 text-lg">Login</a>
+        <a href="sign-up.jsp"
+           class="bg-cyan-500 px-6 py-2 rounded-lg hover:bg-cyan-600 text-lg font-semibold">
+           Sign Up
+        </a>
+    </div>
+</nav>
 
-            <div>
-                <a href="${pageContext.request.contextPath}/sign-up.jsp" class="btn-primary">Open Account</a>
-                <a href="#" class="btn-secondary">View Features</a>
-            </div>
-        </section>
+<!-- HERO SECTION -->
+<div class="flex flex-col items-center justify-center text-center mt-20 px-4">
 
-        <figure>
-            <img src="${pageContext.request.contextPath}/assets/images/bank_hero.svg" alt="Ace Bank Illustration">
-        </figure>
-    </main>
+    <p class="text-cyan-400 mb-4 text-lg">Trusted by 2M+ Users</p>
+
+    <h2 class="text-5xl font-bold mb-6 leading-tight">
+        Banking Made <span class="text-cyan-400">Simple & Secure</span>
+    </h2>
+
+    <p class="text-gray-300 max-w-xl mb-8 text-lg">
+        Manage your money, transfer funds, and track transactions with
+        next-generation digital banking. Fast, secure and reliable.
+    </p>
+
+    <div class="space-x-4">
+        <a href="sign-up.jsp"
+           class="bg-cyan-500 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-cyan-600 shadow-lg">
+           Open Account
+        </a>
+
+        <a href="login.jsp"
+           class="border border-cyan-400 px-8 py-3 rounded-lg text-lg hover:bg-cyan-500">
+           Login Now
+        </a>
+    </div>
 </div>
 
+<!-- FEATURES -->
+<div class="grid md:grid-cols-3 gap-8 px-16 mt-24">
+
+    <div class="bg-white/10 backdrop-blur-lg p-8 rounded-xl text-center">
+        <h3 class="text-xl font-bold mb-2 text-cyan-400">Secure Banking</h3>
+        <p class="text-gray-300">Your money and data are protected with high-level encryption.</p>
+    </div>
+
+    <div class="bg-white/10 backdrop-blur-lg p-8 rounded-xl text-center">
+        <h3 class="text-xl font-bold mb-2 text-cyan-400">Instant Transfer</h3>
+        <p class="text-gray-300">Send and receive money instantly anytime, anywhere.</p>
+    </div>
+
+    <div class="bg-white/10 backdrop-blur-lg p-8 rounded-xl text-center">
+        <h3 class="text-xl font-bold mb-2 text-cyan-400">24/7 Access</h3>
+        <p class="text-gray-300">Access your account and transactions anytime online.</p>
+    </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer class="text-center mt-20 pb-6 text-gray-400">
+    © 2026 AceBank. All rights reserved.
+</footer>
 
 </body>
 </html>

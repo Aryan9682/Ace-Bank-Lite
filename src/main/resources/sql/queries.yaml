@@ -1,54 +1,108 @@
 user:
-  # Updated to fetch essential session data
+
+  # 🔐 Login ke liye basic details
   login_details: >
-    SELECT u.USER_ID, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, a.BALANCE 
-    FROM USERS u 
-    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID 
-    WHERE a.ACCOUNT_NO = ? AND u.PASSWORD_HASH = ?
-  signup: "INSERT INTO USERS (FIRST_NAME, LAST_NAME, AADHAAR_NO, EMAIL, PASSWORD_HASH) VALUES (?,?,?,?,?)"
-  recover_details: >
-    SELECT u.FIRST_NAME, u.LAST_NAME, a.ACCOUNT_NO 
-    FROM USERS u 
-    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID 
-    WHERE u.EMAIL = ?
-  get_password_by_acc: >
-    SELECT u.PASSWORD_HASH 
-    FROM USERS u 
-    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID 
-    WHERE a.ACCOUNT_NO = ?
-  # Fetches everything we need for the session in one go
-  get_details: >
-    SELECT u.FIRST_NAME, u.LAST_NAME, u.EMAIL, a.BALANCE, a.ACCOUNT_NO 
-    FROM USERS u 
-    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID 
+    SELECT u.USER_ID, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, a.BALANCE
+    FROM USERS u
+    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID
     WHERE a.ACCOUNT_NO = ?
 
-  # Updates the password hash for the user linked to this account
-  update_password: >
+  # 🆕 Signup
+  signup: >
+    INSERT INTO USERS (FIRST_NAME, LAST_NAME, AADHAAR_NO, EMAIL, PASSWORD_HASH, MOBILE)
+        VALUES (?,?,?,?,?,?)
+
+  # 🔎 Forgot password (email se account find)
+  recover_details: >
+    SELECT u.FIRST_NAME, u.LAST_NAME, a.ACCOUNT_NO
+    FROM USERS u
+    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID
+    WHERE u.EMAIL = ?
+
+  # 🔐 Password hash fetch (login + change password)
+  get_password_by_acc: >
+    SELECT u.PASSWORD_HASH
+    FROM USERS u
+    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID
+    WHERE a.ACCOUNT_NO = ?
+
+  # 👤 Dashboard details
+  get_details: >
+    SELECT u.FIRST_NAME, u.LAST_NAME, u.EMAIL, a.BALANCE, a.ACCOUNT_NO
+    FROM USERS u
+    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID
+    WHERE a.ACCOUNT_NO = ?
+
+  # 🔁 CHANGE PASSWORD (LOGIN USER)
+  update_password_by_acc: >
     UPDATE USERS u
     JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID
     SET u.PASSWORD_HASH = ?
     WHERE a.ACCOUNT_NO = ?
 
+  # 🔑 SAVE RESET TOKEN (EMAIL RESET)
+  save_reset_token: >
+    UPDATE USERS
+    SET RESET_TOKEN = ?, TOKEN_EXPIRY = DATE_ADD(NOW(), INTERVAL 15 MINUTE)
+    WHERE EMAIL = ?
+
+  # 🔁 RESET PASSWORD USING TOKEN
+  update_password_by_token: >
+    UPDATE USERS
+    SET PASSWORD_HASH = ?, RESET_TOKEN = NULL, TOKEN_EXPIRY = NULL
+    WHERE RESET_TOKEN = ? AND TOKEN_EXPIRY > NOW()
+
+
+loan:
+  save_request: >
+    INSERT INTO LOAN_REQUESTS
+    (ACCOUNT_NO, NAME, LOAN_TYPE, AGE, AMOUNT, STATUS)
+    VALUES (?, ?, ?, ?, ?, 'PENDING')
+
 account:
-  create: "INSERT INTO ACCOUNTS (ACCOUNT_NO, USER_ID, BALANCE) VALUES (?,?,0.00)"
-  withdraw: "UPDATE ACCOUNTS SET BALANCE = BALANCE - ? WHERE ACCOUNT_NO = ? AND BALANCE >= ?"
-  deposit: "UPDATE ACCOUNTS SET BALANCE = BALANCE + ? WHERE ACCOUNT_NO = ?"
-  check_pw: >
-    SELECT u.PASSWORD_HASH, u.USER_ID FROM USERS u 
-    JOIN ACCOUNTS a ON u.USER_ID = a.USER_ID WHERE a.ACCOUNT_NO = ?
-  get_balance: "SELECT BALANCE FROM ACCOUNTS WHERE ACCOUNT_NO = ?"
-  withdraw_balance: "UPDATE ACCOUNTS SET BALANCE = BALANCE - ? WHERE ACCOUNT_NO = ? AND BALANCE >= ?"
+
+  create: >
+    INSERT INTO ACCOUNTS (ACCOUNT_NO, USER_ID, BALANCE)
+    VALUES (?,?,0.00)
+
+  withdraw: >
+    UPDATE ACCOUNTS
+    SET BALANCE = BALANCE - ?
+    WHERE ACCOUNT_NO = ? AND BALANCE >= ?
+
+  deposit: >
+    UPDATE ACCOUNTS
+    SET BALANCE = BALANCE + ?
+    WHERE ACCOUNT_NO = ?
+
+  get_balance: >
+    SELECT BALANCE FROM ACCOUNTS WHERE ACCOUNT_NO = ?
+
+  exists: >
+    SELECT 1 FROM ACCOUNTS WHERE ACCOUNT_NO = ?
 
 
 transaction:
-  log: "INSERT INTO TRANSACTIONS (SENDER_ACCOUNT, RECEIVER_ACCOUNT, AMOUNT, TX_TYPE, REMARK) VALUES (?, ?, ?, ?, ?)"
-  statement: "SELECT * FROM TRANSACTIONS WHERE SENDER_ACCOUNT = ? OR RECEIVER_ACCOUNT = ? ORDER BY CREATED_AT DESC"
+
+  log: >
+    INSERT INTO TRANSACTIONS
+    (SENDER_ACCOUNT, RECEIVER_ACCOUNT, AMOUNT, TX_TYPE, REMARK)
+    VALUES (?, ?, ?, ?, ?)
+
+  statement: >
+    SELECT *
+    FROM TRANSACTIONS
+    WHERE SENDER_ACCOUNT = ? OR RECEIVER_ACCOUNT = ?
+    ORDER BY CREATED_AT DESC
+
   get_daily_withdrawal_total: >
-    SELECT SUM(AMOUNT) FROM TRANSACTIONS 
-    WHERE SENDER_ACCOUNT = ? 
-    AND TX_TYPE = 'WITHDRAWAL' 
-    AND DATE(CREATED_AT) = CURDATE()
+    SELECT SUM(AMOUNT)
+    FROM TRANSACTIONS
+    WHERE SENDER_ACCOUNT = ?
+      AND TX_TYPE = 'WITHDRAWAL'
+      AND DATE(CREATED_AT) = CURDATE()
+
   log_withdrawal: >
-    INSERT INTO TRANSACTIONS (SENDER_ACCOUNT, RECEIVER_ACCOUNT, AMOUNT, TX_TYPE, REMARK) 
-    VALUES (?, ?, ?, 'WITHDRAWAL', 'ATM/Counter Withdrawal')
+    INSERT INTO TRANSACTIONS
+    (SENDER_ACCOUNT, RECEIVER_ACCOUNT, AMOUNT, TX_TYPE, REMARK)
+    VALUES (?, ?, ?, ?, ?)

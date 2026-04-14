@@ -1,290 +1,296 @@
 package com.acebank.lite.dao;
 
-import com.acebank.lite.models.AccountRecoveryDTO;
-import com.acebank.lite.models.LoginResult;
-import com.acebank.lite.models.Transaction;
-import com.acebank.lite.models.User;
+import com.acebank.lite.models.*;
 import com.acebank.lite.util.ConnectionManager;
 import com.acebank.lite.util.QueryLoader;
-
-import java.sql.*;
-import java.util.Optional;
-
-
 import lombok.extern.java.Log;
 
 import java.math.BigDecimal;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Log
 public class BankUserDaoImpl implements BankUserDao {
-
-    @Override
-    public String getPasswordHash(int accountNo) throws SQLException {
-        String sql = QueryLoader.get("user.get_password_by_acc");
-
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setInt(1, accountNo);
-
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getString("PASSWORD_HASH");
-                }
-            }
-        }
-        return null; // Account not found
-    }
 
     private Connection getConnection() throws SQLException {
         return ConnectionManager.getConnection();
     }
 
+    // ================= PASSWORD HASH =================
+
     @Override
-    public boolean login(int accountNo, String password) throws SQLException {
+    public String getPasswordHash(int accountNo) throws SQLException {
+
+        String sql = QueryLoader.get("user.get_password_by_acc");
+
         try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(QueryLoader.get("user.login"))) {
-            pstmt.setInt(1, accountNo);
-            pstmt.setString(2, password);
-            ResultSet rs = pstmt.executeQuery();
-            return rs.next();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, accountNo);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getString("PASSWORD_HASH");
+            }
         }
+        return null;
     }
 
+    @Override
+    public boolean login(int accountNo, String password) throws SQLException {
+        return false;
+    }
+
+    // ================= LOGIN USER DETAILS =================
 
     @Override
     public LoginResult getUserDetails(int accountNo) throws SQLException {
+
         String sql = QueryLoader.get("user.get_details");
 
         try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            pstmt.setInt(1, accountNo);
+            ps.setInt(1, accountNo);
+            ResultSet rs = ps.executeQuery();
 
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return new LoginResult(
-                            rs.getString("FIRST_NAME"),
-                            rs.getString("LAST_NAME"),
-                            rs.getString("EMAIL"),
-                            rs.getBigDecimal("BALANCE"),
-                            rs.getInt("ACCOUNT_NO")
-                    );
-                }
+            if (rs.next()) {
+                return new LoginResult(
+                        rs.getString("FIRST_NAME"),
+                        rs.getString("LAST_NAME"),
+                        rs.getString("EMAIL"),
+                        rs.getBigDecimal("BALANCE"),
+                        rs.getInt("ACCOUNT_NO")
+                );
             }
         }
-        throw new SQLException("User details not found for account: " + accountNo);
+
+        throw new SQLException("User not found");
     }
 
+    @Override
+    public boolean deposit(int accountNo, BigDecimal amount) throws SQLException {
+
+        String sql = QueryLoader.get("account.deposit");
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setBigDecimal(1, amount);
+            ps.setInt(2, accountNo);
+
+            int rows = ps.executeUpdate();
+
+            return rows > 0;
+        }
+    }
+
+    @Override
+    public boolean withdraw(int accountNo, BigDecimal amount) throws SQLException {
+
+        String sql = QueryLoader.get("account.withdraw");
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setBigDecimal(1, amount);
+            ps.setInt(2, accountNo);
+            ps.setBigDecimal(3, amount);
+
+            int rows = ps.executeUpdate();
+
+            if(rows > 0){
+
+                PreparedStatement logPs = con.prepareStatement(
+                        QueryLoader.get("transaction.log_withdrawal"));
+
+                logPs.setInt(1, accountNo);
+                logPs.setInt(2, accountNo);
+                logPs.setBigDecimal(3, amount);
+                logPs.setString(4, "WITHDRAWAL");
+                logPs.setString(5, "ATM Withdrawal");
+
+                logPs.executeUpdate();
+            }
+
+            return rows > 0;
+        }
+    }
+
+    @Override
+    public BigDecimal getDailyWithdrawalTotal(int accountNo) throws SQLException {
+
+        String sql = QueryLoader.get("transaction.get_daily_withdrawal_total");
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setInt(1, accountNo);
+
+            ResultSet rs = ps.executeQuery();
+
+            if(rs.next() && rs.getBigDecimal(1)!=null){
+                return rs.getBigDecimal(1);
+            }
+        }
+
+        return BigDecimal.ZERO;
+    }
+
+    @Override
+    public boolean transfer(int fromAccount, int toAccount, BigDecimal amount) throws SQLException {
+
+        Connection con = getConnection();
+
+        try{
+            con.setAutoCommit(false);
+
+            // debit sender
+            PreparedStatement withdrawPs = con.prepareStatement(
+                    QueryLoader.get("account.withdraw"));
+
+            withdrawPs.setBigDecimal(1, amount);
+            withdrawPs.setInt(2, fromAccount);
+            withdrawPs.setBigDecimal(3, amount);
+
+            int debited = withdrawPs.executeUpdate();
+
+            if(debited == 0){
+                con.rollback();
+                return false;
+            }
+
+            // credit receiver
+            PreparedStatement depositPs = con.prepareStatement(
+                    QueryLoader.get("account.deposit"));
+
+            depositPs.setBigDecimal(1, amount);
+            depositPs.setInt(2, toAccount);
+            depositPs.executeUpdate();
+
+            // transaction log
+            PreparedStatement logPs = con.prepareStatement(
+                    QueryLoader.get("transaction.log"));
+
+            logPs.setInt(1, fromAccount);
+            logPs.setInt(2, toAccount);
+            logPs.setBigDecimal(3, amount);
+            logPs.setString(4, "TRANSFER");
+            logPs.setString(5, "Money Transfer");
+
+            logPs.executeUpdate();
+
+            con.commit();
+            return true;
+
+        }catch(Exception e){
+            con.rollback();
+            e.printStackTrace();
+            return false;
+        }finally{
+            con.setAutoCommit(true);
+            con.close();
+        }
+    }
+
+    // ================= SIGNUP =================
 
     @Override
     public boolean signUp(User user, int accountNo) throws SQLException {
-        Connection conn = getConnection();
-        try {
+
+        try (Connection conn = getConnection()) {
+
             conn.setAutoCommit(false);
 
-            PreparedStatement ps1 = conn.prepareStatement(QueryLoader.get("user.signup"), Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps1 = conn.prepareStatement(
+                    QueryLoader.get("user.signup"),
+                    Statement.RETURN_GENERATED_KEYS
+            );
+
             ps1.setString(1, user.firstName());
             ps1.setString(2, user.lastName());
             ps1.setString(3, user.aadhaarNo());
             ps1.setString(4, user.email());
             ps1.setString(5, user.passwordHash());
+            ps1.setString(6, user.mobile());
             ps1.executeUpdate();
 
             ResultSet rs = ps1.getGeneratedKeys();
+
             if (rs.next()) {
                 PreparedStatement ps2 = conn.prepareStatement(QueryLoader.get("account.create"));
                 ps2.setInt(1, accountNo);
                 ps2.setInt(2, rs.getInt(1));
                 ps2.executeUpdate();
             }
-            conn.commit();
-            return true;
-        } catch (SQLException e) {
-            conn.rollback();
-            return false;
-        } finally {
-            conn.close();
-        }
-    }
-
-
-    @Override
-    public BigDecimal getDailyWithdrawalTotal(int accountNo) throws SQLException {
-        String sql = QueryLoader.get("transaction.get_daily_withdrawal_total");
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, accountNo);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                BigDecimal total = rs.getBigDecimal(1);
-                return total != null ? total : BigDecimal.ZERO;
-            }
-        }
-        return BigDecimal.ZERO;
-    }
-
-    @Override
-    public boolean withdraw(int accountNo, BigDecimal amount) throws SQLException {
-        Connection conn = getConnection();
-        try {
-            conn.setAutoCommit(false); // Start transaction
-
-            // 1. Deduct the balance
-            try (PreparedStatement psUpdate = conn.prepareStatement(QueryLoader.get("account.withdraw_balance"))) {
-                psUpdate.setBigDecimal(1, amount);
-                psUpdate.setInt(2, accountNo);
-                psUpdate.setBigDecimal(3, amount); // Check balance >= amount in SQL
-
-                int rows = psUpdate.executeUpdate();
-                if (rows == 0) {
-                    throw new SQLException("Insufficient funds or invalid account.");
-                }
-            }
-
-            // 2. Record in Transactions table
-            try (PreparedStatement psLog = conn.prepareStatement(QueryLoader.get("transaction.log_withdrawal"))) {
-                psLog.setInt(1, accountNo);
-                psLog.setInt(2, accountNo); // Withdrawals involve only one account
-                psLog.setBigDecimal(3, amount);
-                psLog.executeUpdate();
-            }
-
-            conn.commit(); // Save both changes
-            return true;
-        } catch (SQLException e) {
-            conn.rollback(); // Undo everything if any step fails
-            log.severe("Withdrawal failed for " + accountNo + ": " + e.getMessage());
-            throw e;
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Override
-    public boolean transfer(int fromAcc, int toAcc, BigDecimal amount) throws SQLException {
-        // Use try-with-resources for the connection to ensure it always closes
-        try (Connection conn = getConnection()) {
-            try {
-                conn.setAutoCommit(false); // TRANSACTION START
-
-                // 1. Debit from Sender (Using 'account.withdraw' from your YAML)
-                try (PreparedStatement ps1 = conn.prepareStatement(QueryLoader.get("account.withdraw"))) {
-                    ps1.setBigDecimal(1, amount);
-                    ps1.setInt(2, fromAcc);
-                    ps1.setBigDecimal(3, amount); // The third '?' is for BALANCE >= ?
-                    int rowsAffected = ps1.executeUpdate();
-
-                    // If 0 rows affected, it means insufficient balance!
-                    if (rowsAffected == 0) {
-                        conn.rollback();
-                        return false;
-                    }
-                }
-
-                // 2. Credit to Recipient (Using 'account.deposit' from your YAML)
-                try (PreparedStatement ps2 = conn.prepareStatement(QueryLoader.get("account.deposit"))) {
-                    ps2.setBigDecimal(1, amount);
-                    ps2.setInt(2, toAcc);
-                    ps2.executeUpdate();
-                }
-
-                // 3. Log the Transaction (Using 'transaction.log' from your YAML)
-                try (PreparedStatement ps3 = conn.prepareStatement(QueryLoader.get("transaction.log"))) {
-                    ps3.setInt(1, fromAcc);
-                    ps3.setInt(2, toAcc);
-                    ps3.setBigDecimal(3, amount);
-                    ps3.setString(4, "TRANSFER");
-                    ps3.setString(5, "Transfer to " + toAcc); // Added missing 5th parameter for REMARK
-                    ps3.executeUpdate();
-                }
-
-                conn.commit(); // TRANSACTION SUCCESS
-                return true;
-            } catch (SQLException e) {
-                conn.rollback(); // TRANSACTION REVERT
-                log.severe("Transfer failed: " + e.getMessage());
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public List<Transaction> getStatement(int accountNo) throws SQLException {
-        List<Transaction> txList = new ArrayList<>();
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(QueryLoader.get("transaction.statement"))) {
-            pstmt.setInt(1, accountNo);
-            pstmt.setInt(2, accountNo);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                txList.add(new Transaction(
-                        rs.getInt("ID"), rs.getInt("SENDER_ACCOUNT"), rs.getInt("RECEIVER_ACCOUNT"),
-                        rs.getBigDecimal("AMOUNT"), rs.getString("TX_TYPE"), rs.getString("REMARK"),
-                        rs.getTimestamp("CREATED_AT").toLocalDateTime()
-                ));
-            }
-        }
-        return txList;
-    }
-
-    @Override
-    public boolean deposit(int accountNo, BigDecimal amount) throws SQLException {
-        Connection conn = getConnection();
-        try {
-            conn.setAutoCommit(false);
-            PreparedStatement ps1 = conn.prepareStatement(QueryLoader.get("account.deposit"));
-            ps1.setBigDecimal(1, amount);
-            ps1.setInt(2, accountNo);
-            ps1.executeUpdate();
-
-            PreparedStatement ps2 = conn.prepareStatement(QueryLoader.get("transaction.log"));
-            ps2.setInt(1, accountNo);
-            ps2.setInt(2, accountNo);
-            ps2.setBigDecimal(3, amount);
-            ps2.setString(4, "DEPOSIT");
-            ps2.setString(5, "Self");
-            ps2.executeUpdate();
 
             conn.commit();
             return true;
-        } catch (SQLException e) {
-            conn.rollback();
+
+        } catch (Exception e) {
+            log.severe("Signup failed: " + e.getMessage());
             return false;
-        } finally {
-            conn.close();
         }
     }
+
+    // ================= CHANGE PASSWORD =================
 
     @Override
     public boolean changePassword(int accountNo, String oldPw, String newPw) throws SQLException {
-        try (Connection conn = getConnection()) {
-            int userId = -1;
-            PreparedStatement ps1 = conn.prepareStatement(QueryLoader.get("user.check_password_by_acc"));
-            ps1.setInt(1, accountNo);
-            ResultSet rs = ps1.executeQuery();
-            if (rs.next() && rs.getString("PASSWORD_HASH").equals(oldPw)) {
-                userId = rs.getInt("USER_ID");
-                PreparedStatement ps2 = conn.prepareStatement(QueryLoader.get("user.update_password"));
-                ps2.setString(1, newPw);
-                ps2.setInt(2, userId);
-                return ps2.executeUpdate() > 0;
-            }
-            return false;
-        }
-    }
 
+        String sqlGet = QueryLoader.get("user.get_password_by_acc");
+        String sqlUpdate = QueryLoader.get("user.update_password_by_acc");
+
+        try (Connection conn = getConnection();
+             PreparedStatement psGet = conn.prepareStatement(sqlGet)) {
+
+            psGet.setInt(1, accountNo);
+            ResultSet rs = psGet.executeQuery();
+
+            if (rs.next()) {
+
+                String storedHash = rs.getString("PASSWORD_HASH");
+
+                // 🔐 compare old password
+                if (org.mindrot.jbcrypt.BCrypt.checkpw(oldPw, storedHash)) {
+
+                    // 🔥 HASH NEW PASSWORD
+                    String newHash = org.mindrot.jbcrypt.BCrypt.hashpw(newPw,
+                            org.mindrot.jbcrypt.BCrypt.gensalt());
+
+                    PreparedStatement psUpdate = conn.prepareStatement(sqlUpdate);
+                    psUpdate.setString(1, newHash);
+                    psUpdate.setInt(2, accountNo);
+
+                    int rows = psUpdate.executeUpdate();
+
+                    System.out.println("PASSWORD UPDATED ROWS: " + rows);
+
+                    return rows > 0;
+                } else {
+                    System.out.println("OLD PASSWORD WRONG");
+                }
+            }
+        }
+
+        return false;
+    }
 
     @Override
     public Optional<AccountRecoveryDTO> getRecoveryDetails(String email) throws SQLException {
+
         String sql = QueryLoader.get("user.recover_details");
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, email);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, email);
+
+            ResultSet rs = ps.executeQuery();
+
+            if(rs.next()){
                 return Optional.of(new AccountRecoveryDTO(
                         rs.getString("FIRST_NAME"),
                         rs.getString("LAST_NAME"),
@@ -292,36 +298,269 @@ public class BankUserDaoImpl implements BankUserDao {
                 ));
             }
         }
+
+        return Optional.empty();
+    }
+
+    // ================= BALANCE =================
+
+    @Override
+    public BigDecimal getBalance(int accountNo) throws SQLException {
+
+        String sql = QueryLoader.get("account.get_balance");
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, accountNo);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getBigDecimal("BALANCE");
+            }
+        }
+
+        return BigDecimal.ZERO;
+    }
+
+    // ================= TRANSACTION HISTORY =================
+
+    @Override
+    public List<Transaction> getStatement(int accountNo) throws SQLException {
+
+        List<Transaction> list = new ArrayList<>();
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(QueryLoader.get("transaction.statement"))) {
+
+            ps.setInt(1, accountNo);
+            ps.setInt(2, accountNo);
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                list.add(new Transaction(
+                        rs.getInt("ID"),
+                        rs.getInt("SENDER_ACCOUNT"),
+                        rs.getInt("RECEIVER_ACCOUNT"),
+                        rs.getBigDecimal("AMOUNT"),
+                        rs.getString("TX_TYPE"),
+                        rs.getString("REMARK"),
+                        rs.getTimestamp("CREATED_AT").toLocalDateTime()
+                ));
+            }
+        }
+
+        return list;
+    }
+
+    // ================= RESET TOKEN =================
+
+    @Override
+    public boolean saveResetToken(String email, String token) throws SQLException {
+
+        String sql = """
+                UPDATE USERS 
+                SET RESET_TOKEN=?, TOKEN_EXPIRY=DATE_ADD(NOW(), INTERVAL 15 MINUTE)
+                WHERE EMAIL=?
+                """;
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, token);
+            ps.setString(2, email);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean updatePasswordByToken(String token, String newPassword) throws SQLException {
+
+        String sql = """
+                UPDATE USERS 
+                SET PASSWORD_HASH=?, RESET_TOKEN=NULL, TOKEN_EXPIRY=NULL
+                WHERE RESET_TOKEN=? AND TOKEN_EXPIRY > NOW()
+                """;
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, newPassword);
+            ps.setString(2, token);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    // ================= ACCOUNT EXISTS =================
+
+    @Override
+    public boolean accountExists(int accountNo) throws SQLException {
+
+        String sql = "SELECT 1 FROM ACCOUNTS WHERE ACCOUNT_NO=?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, accountNo);
+            ResultSet rs = ps.executeQuery();
+
+            return rs.next();
+        }
+    }
+
+    @Override
+    public boolean updatePasswordDirect(int accountNo, String newHash) throws SQLException {
+
+        String sql = QueryLoader.get("user.update_password_by_acc");
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, newHash);
+            ps.setInt(2, accountNo);
+
+            int rows = ps.executeUpdate();
+
+            System.out.println("Rows updated: " + rows);
+
+            return rows > 0;
+        }
+    }
+
+    @Override
+    public boolean saveLoanRequest(int accountNo, String loanType) throws SQLException {
+
+        String sql = """
+        INSERT INTO LOAN_REQUESTS (ACCOUNT_NO, LOAN_TYPE)
+        VALUES (?, ?)
+    """;
+
+        try (Connection con = getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, accountNo);
+            ps.setString(2, loanType);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean saveLoanRequest(int accNo, String name, String loanType, int age, double amount) throws SQLException {
+
+        String sql = QueryLoader.get("loan.save_request");
+
+        try (Connection con = getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, accNo);
+            ps.setString(2, name);
+            ps.setString(3, loanType);
+            ps.setInt(4, age);
+            ps.setDouble(5, amount);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean saveOtp(String email, String otp) throws SQLException {
+
+        String sql = """
+        UPDATE USERS
+        SET OTP_CODE=?, 
+            OTP_EXPIRY=DATE_ADD(NOW(), INTERVAL 5 MINUTE),
+            OTP_ATTEMPTS=0
+        WHERE EMAIL=?
+        """;
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, otp);
+            ps.setString(2, email);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public Optional<String> getOtpByEmail(String email) throws SQLException {
+
+        String sql = """
+        SELECT OTP_CODE 
+        FROM USERS 
+        WHERE EMAIL=? 
+          AND OTP_EXPIRY > NOW()
+          AND OTP_ATTEMPTS < 3
+        """;
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, email);
+            ResultSet rs = ps.executeQuery();
+
+            if(rs.next()){
+                return Optional.of(rs.getString("OTP_CODE"));
+            }
+        }
+
         return Optional.empty();
     }
 
     @Override
-    public boolean accountExists(int accountNo) throws SQLException {
-        String sql = "SELECT 1 FROM ACCOUNTS WHERE ACCOUNT_NO = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, accountNo);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
+    public boolean incrementOtpAttempts(String email) throws SQLException {
+
+        String sql = "UPDATE USERS SET OTP_ATTEMPTS = OTP_ATTEMPTS + 1 WHERE EMAIL=?";
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, email);
+            return ps.executeUpdate() > 0;
         }
     }
 
     @Override
-    public BigDecimal getBalance(int accountNo) throws SQLException {
-        String sql = QueryLoader.get("account.get_balance");
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    public boolean resetOtp(String email) throws SQLException {
 
-            pstmt.setInt(1, accountNo);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getBigDecimal("BALANCE");
-                }
-            }
+        String sql = """
+        UPDATE USERS 
+        SET OTP_CODE=NULL,
+            OTP_EXPIRY=NULL,
+            OTP_ATTEMPTS=0
+        WHERE EMAIL=?
+        """;
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, email);
+            return ps.executeUpdate() > 0;
         }
-        return BigDecimal.ZERO;
     }
 
+    @Override
+    public boolean updatePasswordByEmail(String email, String newHash) throws SQLException {
 
+        String sql = "UPDATE USERS SET PASSWORD_HASH=? WHERE EMAIL=?";
+
+        try(Connection con = getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+
+            ps.setString(1, newHash);
+            ps.setString(2, email);
+
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public String getUserMobile(int accountNo) {
+        return "";
+    }
 }

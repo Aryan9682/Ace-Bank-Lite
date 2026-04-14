@@ -3,6 +3,7 @@ package com.acebank.lite.controllers;
 
 import com.acebank.lite.models.*;
 
+import com.acebank.lite.models.ServiceResponse;
 import com.acebank.lite.service.BankService;
 import com.acebank.lite.service.BankServiceImpl;
 import jakarta.servlet.ServletException;
@@ -83,23 +84,34 @@ public class Home extends HttpServlet {
             // --- ACTION 1: DEPOSIT ---
             if (depositAmtStr != null && !depositAmtStr.trim().isEmpty()) {
                 BigDecimal amount = new BigDecimal(depositAmtStr);
-                boolean status = bankService.processDeposit(accountNumber, amount);
-                log.info("Deposit Status: " + status);
 
+                boolean status = bankService.processDeposit(accountNumber, amount);
+
+                String msg = status ? "Deposit Successful" : "Deposit Failed";
+
+                response.sendRedirect(request.getContextPath() + "/home?msg=" + msg);
+                return;
             }
 // --- ACTION 2: WITHDRAW ---
             else if (withdrawAmount != null && !withdrawAmount.trim().isEmpty()) {
                 BigDecimal amount = new BigDecimal(withdrawAmount);
-                // Ensure your Service has this method matching the DAO rectification we did
+
                 String status = bankService.withdraw(accountNumber, amount);
-                log.info("Withdrawal Status: " + status);
+
+                // 🔥 status ko URL me bhej rahe
+                response.sendRedirect(request.getContextPath() + "/home?msg=" + status);
+                return;
             }
 
             // --- ACTION 3: TRANSFER ---
             else if (toAccountStr != null && toAmountStr != null && !toAccountStr.trim().isEmpty()) {
                 int recipientAcc = Integer.parseInt(toAccountStr);
                 BigDecimal amount = new BigDecimal(toAmountStr);
-                bankService.processTransfer(accountNumber, recipientAcc, amount);
+
+                ServiceResponse res = bankService.processTransfer(accountNumber, recipientAcc, amount);
+
+                response.sendRedirect(request.getContextPath() + "/home?msg=" + res.message());
+                return;
             }
 
         } catch (NumberFormatException e) {
@@ -114,12 +126,22 @@ public class Home extends HttpServlet {
 
     }
 
-    private void updateSessionData(HttpSession session, int accountNumber) {
-        log.info("Refreshing session data for account: " + accountNumber);
-        BigDecimal newBalance = bankService.getBalance(accountNumber);
-        List<Transaction> newList = bankService.getTransactionHistory(accountNumber);
+    private void updateSessionData(HttpSession session, int accNo) {
 
-        session.setAttribute("balance", newBalance);
-        session.setAttribute("transactionDetailsList", newList);
+        try {
+            BankService service = new BankServiceImpl();
+
+            // 1️⃣ balance update
+            session.setAttribute("balance", service.getBalance(accNo));
+
+            // 2️⃣ transaction history fetch
+            List<Transaction> txList = service.getTransactionHistory(accNo);
+
+            // 3️⃣ session me store karo
+            session.setAttribute("transactionDetailsList", txList);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

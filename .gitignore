@@ -40,3 +40,19 @@ build/
 
 /src/resources/application-dev.properties
 
+# Sensitive files (IMPORTANT)
+db.properties
+application.properties
+*.env
+
+# Tomcat temp
+.SmartTomcat/
+
+# Logs & temp
+*.log
+
+# OS junk
+Thumbs.db
+
+
+

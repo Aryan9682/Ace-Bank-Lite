@@ -1,81 +1,69 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
-<%@ taglib prefix="c" uri="jakarta.tags.core" %>
-<%
-    // Keeping the cookie logic but making it accessible to EL
-    String savedAccount = "";
-    Cookie[] cookies = request.getCookies();
-    if (cookies != null) {
-        for (Cookie c : cookies) {
-            if ("rememberedAccount".equals(c.getName())) {
-                savedAccount = c.getValue();
-                pageContext.setAttribute("savedAccount", savedAccount);
-            }
-        }
-    }
-%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | AceBank</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login | AceBank</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body>
-<div class="auth-wrapper fade-in-up">
+<body class="bg-gradient-to-br from-blue-900 to-black min-h-screen flex items-center justify-center">
 
-    <header>
-        <div >
-            <h1>Ace<span>Bank</span></h1>
+<div class="bg-white/10 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-[380px] text-white">
+
+    <h1 class="text-3xl font-bold text-center mb-6 text-cyan-400">AceBank</h1>
+    <h2 class="text-xl text-center mb-6 font-semibold">Welcome Back</h2>
+
+    <!-- 🔴 ERROR MESSAGE ONLY WHEN WRONG LOGIN -->
+    <c:if test="${param.error != null && param.error != ''}">
+        <div class="bg-red-500 text-white p-3 rounded mb-4 text-center font-semibold">
+            ${param.error}
+        </div>
+    </c:if>
+
+    <!-- LOGIN FORM -->
+    <form action="Login" method="post" autocomplete="off" class="space-y-4">
+
+        <div>
+            <label class="block mb-1 text-sm">Account Number</label>
+            <input type="text" name="accountNumber"
+                class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                placeholder="Enter Account Number" required>
         </div>
 
-        <div class="header-actions">
-
-            <nav>
-                <ul>
-                    <li><a href="index.jsp">Home</a></li>
-                    <li><a href="sign-up.jsp">Join Now</a></li>
-                </ul>
-            </nav>
-        </div>
-    </header>
-
-    <main class="auth-card">
-        <div class="auth-header">
-            <h2>Welcome Back</h2>
-            <p>Enter your credentials to access your account.</p>
+        <div>
+            <label class="block mb-1 text-sm">Password</label>
+            <input type="password" name="password"
+                class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                placeholder="Enter Password" required>
         </div>
 
-        <form action="Login" method="POST">
-            <div class="form-control">
-                <label for="accNo">Account Number</label>
-                <input type="text" id="accNo" name="accountNumber"
-                       value="${savedAccount}" required
-                       placeholder="Enter Account Number">
-            </div>
+        <div class="flex justify-between items-center text-sm">
+            <label>
+                <input type="checkbox" name="rememberMe"> Remember Me
+            </label>
 
-            <div>
-                <label for="pass">Password</label>
-                <input type="password" id="pass" name="password"
-                       required placeholder="••••••••">
-            </div>
-            <div>
-                <input type="checkbox" name="rememberMe" id="remember"
-                ${not empty savedAccount ? 'checked' : ''}>
-                <label for="remember">Remember Me</label>
-            </div>
-            <a href="ForgotPassword.jsp">Forgot Password?</a>
+            <a href="ForgotPassword.jsp" class="text-cyan-400 hover:underline">
+                Forgot?
+            </a>
+        </div>
+
+        <button type="submit"
+            class="w-full bg-cyan-500 hover:bg-cyan-600 p-3 rounded-lg font-bold text-lg">
+            Login
+        </button>
+
+    </form>
+
+    <p class="text-center mt-6 text-sm">
+        New user?
+        <a href="sign-up.jsp" class="text-cyan-400 hover:underline">Create account</a>
+    </p>
+
 </div>
-
-<button type="submit">Login to Account</button>
-</form>
-
-<p>
-    New to Ace Bank? <a href="sign-up.jsp">Create an account</a>
-</p>
-</main>
-</div>
-
-
 </body>
 </html>

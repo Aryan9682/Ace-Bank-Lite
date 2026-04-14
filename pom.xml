@@ -60,6 +60,7 @@
             <artifactId>snakeyaml</artifactId>
             <version>2.5</version>
             <scope>compile</scope>
+
         </dependency>
 
 
@@ -104,6 +105,12 @@
             <artifactId>mybatis</artifactId>
             <version>3.5.19</version>
             <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itextpdf</artifactId>
+            <version>5.5.13.3</version>
         </dependency>
 
 

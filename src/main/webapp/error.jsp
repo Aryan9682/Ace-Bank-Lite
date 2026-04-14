@@ -1,63 +1,43 @@
-<%--
-  Created by IntelliJ IDEA.
-  User: suman
-  Date: 08-02-2026
-  Time: 11:56
-  To change this template use File | Settings | File Templates.
---%>
-<%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>${errorTitle} - AceBank</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            text-align: center;
-            padding-top: 100px;
-            color: #333;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${errorTitle} | AceBank</title>
 
-        .error-box {
-            border: 1px solid #ddd;
-            display: inline-block;
-            padding: 40px;
-            border-radius: 10px;
-            background: #fff;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
+<script src="https://cdn.tailwindcss.com"></script>
 
-        .code {
-            font-size: 72px;
-            color: #e74c3c;
-            margin: 0;
-        }
-
-        h2 {
-            margin-top: 0;
-        }
-
-        .msg {
-            color: #666;
-            margin-bottom: 20px;
-        }
-
-        .btn {
-            text-decoration: none;
-            background: #3498db;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-        }
-    </style>
 </head>
-<body>
 
-<div class="error-box">
-    <p class="code">${errorCode}</p>
-    <h2>${errorTitle}</h2>
-    <p class="msg">${errorMessage}</p>
-    <a href="${pageContext.request.contextPath}/home" class="btn">Return to Secure Dashboard</a>
+<body class="bg-gradient-to-br from-blue-900 to-black min-h-screen flex items-center justify-center text-white">
+
+<div class="bg-white/10 backdrop-blur-lg shadow-2xl rounded-2xl p-12 w-[500px] text-center">
+
+    <!-- Error Code -->
+    <h1 class="text-7xl font-bold text-red-400 mb-4">${errorCode}</h1>
+
+    <!-- Title -->
+    <h2 class="text-2xl font-semibold mb-4">${errorTitle}</h2>
+
+    <!-- Message -->
+    <p class="text-gray-300 mb-8">
+        ${errorMessage}
+    </p>
+
+    <!-- Buttons -->
+    <div class="space-x-4">
+        <a href="${pageContext.request.contextPath}/home"
+           class="bg-cyan-500 hover:bg-cyan-600 px-6 py-3 rounded-lg font-semibold">
+            Go Dashboard
+        </a>
+
+        <a href="index.jsp"
+           class="border border-cyan-400 px-6 py-3 rounded-lg hover:bg-cyan-500">
+            Home Page
+        </a>
+    </div>
+
+</div>
 
 </body>
 </html>

@@ -1,10 +1,9 @@
 package com.acebank.lite.service;
 
-
+import com.acebank.lite.util.SmsUtil;
 import com.acebank.lite.dao.BankUserDao;
 import com.acebank.lite.dao.BankUserDaoImpl;
 
-import com.acebank.lite.models.*;
 import com.acebank.lite.models.*;
 import com.acebank.lite.util.MailUtil;
 import com.acebank.lite.util.PasswordUtil;
@@ -17,53 +16,119 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
+
+
 @Log
 public class BankServiceImpl implements BankService {
 
     private final BankUserDao userDao = new BankUserDaoImpl(); // Or get via Singleton
-    private static final BigDecimal DAILY_LIMIT = new BigDecimal("500.00");
+    private static final BigDecimal DAILY_LIMIT = new BigDecimal("2000.00");
 
 
     @Override
     public Optional<LoginResult> authenticate(int accountNo, String plainPassword) {
         try {
-            // 1. Get the hash using the new DAO method
             String storedHash = userDao.getPasswordHash(accountNo);
 
-            // 2. Compare using BCrypt
-            if (PasswordUtil.checkPassword(plainPassword, storedHash)) {
-                // 3. If matched, fetch full details for the session
+            System.out.println("Entered password: " + plainPassword);
+            System.out.println("Stored hash: " + storedHash);
+
+            boolean match = PasswordUtil.checkPassword(plainPassword, storedHash);
+            System.out.println("Password match: " + match);
+
+            if (match) {
                 return Optional.of(userDao.getUserDetails(accountNo));
             }
+
         } catch (SQLException e) {
-            log.severe("Database error during login: " + e.getMessage());
+            log.severe("Login DB error: " + e.getMessage());
         }
         return Optional.empty();
     }
 
 
     @Override
-    public boolean changePassword(int accountNo, String oldPlain, String newPlain) throws SQLException {
-        String storedHash = userDao.getPasswordHash(accountNo);
+    public boolean changePassword(int accountNo, String oldPlain, String newPlain) {
 
-        if (PasswordUtil.checkPassword(oldPlain, storedHash)) {
-            String newSecureHash = PasswordUtil.hashPassword(newPlain);
-            return userDao.changePassword(accountNo, storedHash, newSecureHash);
+        try {
+            // 🔐 get stored hash
+            String storedHash = userDao.getPasswordHash(accountNo);
+
+            if (storedHash == null) {
+                System.out.println("User not found");
+                return false;
+            }
+
+            // 🔐 check old password
+            if (!PasswordUtil.checkPassword(oldPlain, storedHash)) {
+                System.out.println("OLD PASSWORD WRONG");
+                return false;
+            }
+
+            // 🔐 hash new password
+            String newHash = PasswordUtil.hashPassword(newPlain);
+
+            // 🔥 UPDATE PASSWORD IN DB
+            boolean updated = userDao.updatePasswordDirect(accountNo, newHash);
+
+            if(updated){
+                System.out.println("PASSWORD UPDATED SUCCESSFULLY");
+            }else{
+                System.out.println("PASSWORD UPDATE FAILED");
+            }
+
+            return updated;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
-        return false;
     }
 
 
     @Override
     public boolean processDeposit(int accountNo, BigDecimal amount) {
-        // Business Rule: No zero or negative deposits
+
+        // Rule: amount valid hona chahiye
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             return false;
         }
 
         try {
-            // Orchestrate the DAO call
-            return userDao.deposit(accountNo, amount);
+            boolean success = userDao.deposit(accountNo, amount);
+
+            if (success) {
+
+                // 1️⃣ Updated balance nikalo
+                BigDecimal newBalance = userDao.getBalance(accountNo);
+
+                // 2️⃣ User email nikalo
+                String email = userDao.getUserDetails(accountNo).email();
+
+                // 3️⃣ Email message banao
+                String message = String.format("""
+                    Dear Customer,
+
+                    ₹%s has been CREDITED to your account.
+                    Available Balance: ₹%s
+
+                    Thank you for banking with AceBank.
+                    """, amount, newBalance);
+
+                // 4️⃣ Async email send
+                MailUtil.sendMailAsync(email, "Deposit Alert - AceBank", message);
+
+                // 📱 SEND SMS ALSO
+                String mobile = userDao.getUserMobile(accountNo);
+
+                if(mobile != null){
+                    String sms = "AceBank: Rs "+amount+" credited. Bal: Rs "+newBalance;
+                    SmsUtil.sendSMS(mobile, sms);
+                }
+            }
+
+            return success;
+
         } catch (SQLException e) {
             log.severe("Deposit Error for " + accountNo + ": " + e.getMessage());
             return false;
@@ -85,12 +150,47 @@ public class BankServiceImpl implements BankService {
 
             if (projectedTotal.compareTo(DAILY_LIMIT) > 0) {
                 BigDecimal remaining = DAILY_LIMIT.subtract(alreadyWithdrawn);
-                return "Limit exceeded. You can only withdraw $" + remaining + " more today.";
+                return "Limit exceeded. You can only withdraw ₹" + remaining + " more today.";
             }
 
-            // Rule 3: Process the actual DB update via DAO
-            boolean success = userDao.withdraw(accountNo, amount); // Reuses logic similar to transfer
-            return success ? "SUCCESS" : "Insufficient balance or account error.";
+            // Rule 3: Process withdrawal in DB
+            boolean success = userDao.withdraw(accountNo, amount);
+
+            if (success) {
+
+                // ✅ STEP 4: Get updated balance
+                BigDecimal newBalance = userDao.getBalance(accountNo);
+
+                // ✅ STEP 5: Get user email
+                String email = userDao.getUserDetails(accountNo).email();
+
+                // ✅ STEP 6: Prepare email message
+                String message = String.format("""
+                    Dear Customer,
+
+                    ₹%s has been DEBITED from your account.
+                    Available Balance: ₹%s
+
+                    If this was not you, contact support immediately.
+
+                    Thank you for banking with AceBank.
+                    """, amount, newBalance);
+
+                // ✅ STEP 7: Send email asynchronously
+                MailUtil.sendMailAsync(email, "Withdrawal Alert - AceBank", message);
+
+                // 📱 SEND SMS ALSO
+                String mobile = userDao.getUserMobile(accountNo);
+
+                if(mobile != null){
+                    String sms = "AceBank: Rs "+amount+" debited. Bal: Rs "+newBalance;
+                    SmsUtil.sendSMS(mobile, sms);
+                }
+
+                return "SUCCESS";
+            } else {
+                return "Insufficient balance or account error.";
+            }
 
         } catch (SQLException e) {
             return "System error. Please try later.";
@@ -108,7 +208,7 @@ public class BankServiceImpl implements BankService {
         // Create a new version of the record with the hash
         User secureUser = new User(
                 user.userId(), user.firstName(), user.lastName(),
-                user.aadhaarNo(), user.email(), secureHash, user.createdAt()
+                user.aadhaarNo(), user.email(), secureHash, user.mobile(), user.createdAt()
         );
         try {
             // 2. Save to Database via DAO
@@ -196,7 +296,38 @@ public class BankServiceImpl implements BankService {
             boolean success = userDao.transfer(fromAcc, toAcc, amount);
 
             if (success) {
-                log.info("Transfer Successful: ₹" + amount + " from " + fromAcc + " to " + toAcc);
+                // 1️⃣ Get Updated Balances
+                BigDecimal senderBalance = userDao.getBalance(fromAcc);
+                BigDecimal receiverBalance = userDao.getBalance(toAcc);
+
+                // 2️⃣ Get Email IDs
+                String senderEmail = userDao.getUserDetails(fromAcc).email();
+                String receiverEmail = userDao.getUserDetails(toAcc).email();
+
+                // 3️⃣ Prepare Messages
+                String debitMessage = String.format("""
+            Dear Customer,
+
+            ₹%s has been DEBITED from your account.
+            Transferred To: %d
+            Available Balance: ₹%s
+
+            Thank you for banking with AceBank.
+            """, amount, toAcc, senderBalance);
+
+                String creditMessage = String.format("""
+            Dear Customer,
+
+            ₹%s has been CREDITED to your account.
+            Received From: %d
+            Available Balance: ₹%s
+
+            Thank you for banking with AceBank.
+            """, amount, fromAcc, receiverBalance);
+
+                // 4️⃣ Send Email Asynchronously
+                MailUtil.sendMailAsync(senderEmail, "Debit Alert - AceBank", debitMessage);
+                MailUtil.sendMailAsync(receiverEmail, "Credit Alert - AceBank", creditMessage);
                 return new ServiceResponse(true, "Transfer Successful!");
             } else {
                 return new ServiceResponse(false, "Transfer could not be processed. Please try again.");
@@ -265,5 +396,196 @@ public class BankServiceImpl implements BankService {
         }
     }
 
+    @Override
+    public boolean sendResetLink(String email) {
+        try {
+            Optional<AccountRecoveryDTO> userOpt = userDao.getRecoveryDetails(email);
+
+            if (userOpt.isEmpty()) {
+                return false;
+            }
+
+            // 1️⃣ Generate unique token
+            String token = java.util.UUID.randomUUID().toString();
+
+            // 2️⃣ Save token in DB
+            userDao.saveResetToken(email, token);
+
+            // 3️⃣ Create reset link
+            String resetLink = "http://localhost:8080/ace-bank-lite/reset-password?token=" + token;
+
+            // 4️⃣ Send email
+            MailUtil.sendMail(email,
+                    "Password Reset - AceBank",
+                    "Click the link below to reset your password:\n\n" + resetLink +
+                            "\n\nThis link will expire in 15 minutes.");
+
+            return true;
+
+        } catch (Exception e) {
+            log.severe("Error sending reset link: " + e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean resetPassword(String token, String newPassword) {
+        try {
+            // 🔐 HASH PASSWORD FIRST
+            String hashedPassword = PasswordUtil.hashPassword(newPassword);
+
+            // Save hashed password in DB
+            return userDao.updatePasswordByToken(token, hashedPassword);
+
+        } catch (Exception e) {
+            log.severe("Reset password failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean applyLoan(int accountNo, String loanType) {
+
+        try {
+            // 1️⃣ DB me save
+            boolean saved = userDao.saveLoanRequest(accountNo, loanType);
+
+            if (!saved) return false;
+
+            // 2️⃣ user email nikalo
+            String email = userDao.getUserDetails(accountNo).email();
+            String name = userDao.getUserDetails(accountNo).firstName();
+
+            // 3️⃣ mail content
+            String subject = "Loan Request Received - AceBank";
+            String msg = """
+                Dear %s,
+                
+                Your %s loan request has been received successfully.
+                Our team will contact you shortly.
+                
+                Thank you for choosing AceBank.
+                """.formatted(name, loanType);
+
+            // 4️⃣ send mail
+            MailUtil.sendMailAsync(email, subject, msg);
+
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    @Override
+    public boolean applyLoan(int accNo, String name, String email,
+                             String loanType, int age, double amount) throws Exception {
+
+        // ✅ 1. Pre-approved limit check
+        double preApprovedLimit = 500000;
+
+        if(amount > preApprovedLimit){
+            return false;
+        }
+
+        // ✅ 2. Save in DB
+        boolean saved = userDao.saveLoanRequest(accNo, name, loanType, age, amount);
+
+        if(!saved) return false;
+
+        // ✅ 3. Send Professional Email
+        String subject = "Loan Application Request - AceBank";
+
+        String message = "Dear " + name + ",\n\n"
+                + "Greetings from AceBank!\n\n"
+                + "We have received your loan application request. Below are the details:\n\n"
+                + "--------------------------------------\n"
+                + "Customer Name : " + name + "\n"
+                + "Account Number: " + accNo + "\n"
+                + "Loan Type     : " + loanType + "\n"
+                + "Age           : " + age + " years\n"
+                + "Pre-Approved Loan Limit : ₹5,00,000\n"
+                + "Requested Loan Amount   : ₹" + amount + "\n"
+                + "--------------------------------------\n\n"
+                + "Our loan department will review your request within 24-48 hours.\n\n"
+                + "Thank you for banking with AceBank.\n\n"
+                + "Regards,\n"
+                + "Loan Department\n"
+                + "AceBank Pvt Ltd";
+
+        MailUtil.sendMail(email, subject, message);
+
+        return true;
+    }
+
+
+
+
+    @Override
+    public boolean verifyOtpAndReset(String email, String otp, String newPassword){
+
+        try{
+            Optional<String> storedOtp = userDao.getOtpByEmail(email);
+
+            if(storedOtp.isEmpty()){
+                return false;
+            }
+
+            if(!storedOtp.get().equals(otp)){
+                userDao.incrementOtpAttempts(email);
+                return false;
+            }
+
+            // 🔐 HASH PASSWORD (MOST IMPORTANT)
+            String hash = PasswordUtil.hashPassword(newPassword);
+
+            // update hashed password
+            userDao.updatePasswordByEmail(email, hash);
+
+            // reset otp
+            userDao.resetOtp(email);
+
+            System.out.println("PASSWORD RESET SUCCESS");
+
+            return true;
+
+        }catch(Exception e){
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+
+    @Override
+    public boolean sendOtp(String email) {
+
+        try{
+            Optional<AccountRecoveryDTO> userOpt = userDao.getRecoveryDetails(email);
+
+            if(userOpt.isEmpty()){
+                return false;
+            }
+
+            // 6 digit OTP
+            String otp = String.valueOf((int)(Math.random()*900000)+100000);
+
+            // save OTP DB me
+            userDao.saveOtp(email, otp);
+
+            // mail send
+            MailUtil.sendMail(
+                    email,
+                    "AceBank OTP Verification",
+                    "Your OTP is: " + otp + "\nValid for 5 minutes."
+            );
+
+            return true;
+
+        }catch(Exception e){
+            e.printStackTrace();
+            return false;
+        }
+    }
 
 }

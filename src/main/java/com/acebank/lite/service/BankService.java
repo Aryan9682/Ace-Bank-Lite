@@ -32,4 +32,20 @@ public interface BankService {
     public boolean recoverAccount(String email);
 
     public boolean applyForLoan(String firstName, String email, String loanType);
+
+    boolean sendResetLink(String email);
+
+    boolean resetPassword(String token, String newPassword);
+
+    boolean applyLoan(int accountNo, String loanType);
+
+    boolean applyLoan(int accNo, String name, String email,
+                      String loanType, int age, double amount) throws Exception;
+
+
+    boolean sendOtp(String email);
+
+    boolean verifyOtpAndReset(String email, String otp, String newPassword);
+
+
 }

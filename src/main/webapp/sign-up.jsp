@@ -1,59 +1,78 @@
-<%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Get Started | AceBank</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Account | AceBank</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
 </head>
 
-<body>
-<div>
-    <header>
-        <div>
-            <h1>Ace<span>Bank</span></h1>
+<body class="bg-gradient-to-br from-blue-900 to-black min-h-screen flex items-center justify-center">
+
+<div class="bg-white/10 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-[420px] text-white">
+
+    <!-- LOGO -->
+    <h1 class="text-3xl font-bold text-center mb-6 text-cyan-400">AceBank</h1>
+
+    <h2 class="text-xl text-center mb-6 font-semibold">Create Your Account</h2>
+
+    <form action="signup" method="POST" class="space-y-4">
+
+        <!-- First + Last Name -->
+        <div class="flex gap-4">
+            <input type="text" name="firstName"
+                placeholder="First Name"
+                class="w-1/2 p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                required>
+
+            <input type="text" name="lastName"
+                placeholder="Last Name"
+                class="w-1/2 p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                required>
         </div>
 
-        <div>
-            <nav>
-                <ul>
-                    <li><a href="login.jsp">Login</a></li>
-                </ul>
-            </nav>
-        </div>
-    </header>
+        <!-- Aadhaar -->
+        <input type="text" name="aadharNumber"
+            placeholder="Aadhaar Number (12 digits)"
+            pattern="\d{12}"
+            class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            required>
 
-    <main>
-        <div>
-            <h2>Create Account</h2>
-            <p>Join thousands of users managing money smarter.</p>
-        </div>
+        <!-- Email -->
+        <input type="email" name="email"
+            placeholder="Email Address"
+            class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            required>
 
-        <form action="signup" method="POST" id="signup-form">
-            <div>
-                <div id="firstName-group">
-                    <input type="text" name="firstName" id="firstName" placeholder="First Name">
-                </div>
-                <div id="lastName-group">
-                    <input type="text" name="lastName" id="lastName" placeholder="Last Name">
-                </div>
-            </div>
+        <!-- Password -->
+        <input type="password" name="password"
+            placeholder="Password (Min 8 chars)"
+            minlength="8"
+            class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            required>
 
-            <div id="aadhar-group">
-                <input type="text" name="aadharNumber" id="aadharNumber" placeholder="Aadhar Number (12 digits)">
-            </div>
+            <input type="text" name="mobile"
+            placeholder="Mobile Number"
+            pattern="[0-9]{10}"
+            maxlength="10"
+            class="w-full p-3 rounded-lg bg-white/20 border border-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            required>
 
-            <div id="email-group">
-                <input type="email" name="email" id="email" placeholder="Email Address">
-            </div>
+        <!-- Submit -->
+        <button type="submit"
+            class="w-full bg-cyan-500 hover:bg-cyan-600 p-3 rounded-lg font-bold text-lg">
+            Create Account
+        </button>
 
-            <div id="password-group">
-                <input type="password" name="password" id="password" placeholder="Password (Min. 10 chars)">
-            </div>
+    </form>
 
-            <button type="submit" id="submit-btn">Create Account</button>
-        </form>
-    </main>
+    <p class="text-center mt-6 text-sm">
+        Already have an account?
+        <a href="login.jsp" class="text-cyan-400 hover:underline">Login</a>
+    </p>
+
 </div>
 
 </body>
