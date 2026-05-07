@@ -1,0 +1,21 @@
+services:
+
+  acebank-app:
+    build: .
+    container_name: acebank-app
+
+    ports:
+      - "9090:8080"
+
+  mysql-db:
+    image: mysql:8.0
+    container_name: acebank-mysql
+
+    restart: always
+
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: acebank
+
+    ports:
+      - "3307:3306"
